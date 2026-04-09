@@ -77,6 +77,7 @@ function NavBar({ page, setPage }) {
   const tabs = [
     { id: "today", label: "Today", icon: "🏠" },
     { id: "fitness", label: "Fitness", icon: "💪" },
+    { id: "meals", label: "Meals", icon: "🍽️" },
     { id: "beauty", label: "Beauty", icon: "✨" },
     { id: "programs", label: "Programs", icon: "🗂️" },
     { id: "progress", label: "Progress", icon: "📈" },
@@ -874,7 +875,7 @@ function ProgramsPage({ programs, setPrograms }) {
 }
 
 // ── PAGE: PROGRESS ───────────────────────────────────────────
-function ProgressPage({ habits, habitList, protein, waterLog, measurements, setMeasurements, milesLog, challengeStart }) {
+function ProgressPage({ habits, habitList, protein, waterLog, measurements, setMeasurements, milesLog, challengeStart, workoutDone, workoutPlan }) {
   const [measInput, setMeasInput] = useState({ weight: "", bf: "" });
   const [showMeasForm, setShowMeasForm] = useState(false);
 
@@ -923,30 +924,166 @@ function ProgressPage({ habits, habitList, protein, waterLog, measurements, setM
   }
 
   function HabitGrid({ habitId, habitLabel, icon }) {
+    // Build exactly 28 days going back from today
     const grid = Array.from({ length: 28 }, (_, i) => {
       const d = new Date(); d.setDate(d.getDate() - (27 - i));
       return d.toISOString().split("T")[0];
     });
-    const cols = Array.from({ length: 4 }, (_, w) => grid.slice(w * 7, w * 7 + 7));
-    const streak = (() => { let n = 0, d = new Date(); while (true) { const k = d.toISOString().split("T")[0]; if (habits[k]?.[habitId]) { n++; d.setDate(d.getDate() - 1); } else break; } return n; })();
+
+    // Calculate streak
+    const streak = (() => {
+      let n = 0, d = new Date();
+      while (true) {
+        const k = d.toISOString().split("T")[0];
+        if (habits[k]?.[habitId]) { n++; d.setDate(d.getDate() - 1); } else break;
+      }
+      return n;
+    })();
     const total = grid.filter(k => habits[k]?.[habitId]).length;
+
+    // Streak dates for amber highlight
+    const streakDates = new Set();
+    if (streak > 0) {
+      const d = new Date();
+      for (let i = 0; i < streak; i++) {
+        streakDates.add(d.toISOString().split("T")[0]);
+        d.setDate(d.getDate() - 1);
+      }
+    }
+
+    // Display as 4 rows of 7 (week rows, day columns) — simple and reliable
+    const weeks = Array.from({ length: 4 }, (_, w) => grid.slice(w * 7, w * 7 + 7));
+
     return (
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#1a1a1a" }}>{icon} {habitLabel}</div>
-          <div style={{ display: "flex", gap: 12 }}>
-            <span style={{ fontSize: 12, color: "#888" }}>🔥 {streak}</span>
-            <span style={{ fontSize: 12, color: "#888" }}>{total}/28</span>
+      <div style={{ marginBottom: 24, paddingBottom: 24, borderBottom: "1px solid #f0ede9" }}>
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ fontSize: 20 }}>{icon}</div>
+            <div style={{ fontWeight: 600, fontSize: 14, color: "#1a1a1a" }}>{habitLabel}</div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {streak > 0 && (
+              <div style={{ background: "#fff8e8", borderRadius: 20, padding: "4px 12px", display: "flex", alignItems: "center", gap: 4 }}>
+                <span style={{ fontSize: 14 }}>🔥</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: "#e8a84a" }}>{streak} day streak</span>
+              </div>
+            )}
+            <div style={{ background: "#f0ede9", borderRadius: 20, padding: "4px 12px" }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "#888" }}>{total}/28</span>
+            </div>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 3 }}>
-          {cols.map((col, ci) => (
-            <div key={ci} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-              {col.map((k, ri) => (
-                <div key={ri} style={{ width: 14, height: 14, borderRadius: 3, background: habits[k]?.[habitId] ? "#1a1a1a" : "#f0ede9", border: k === todayKey() ? "1.5px solid #b5a898" : "none" }} />
-              ))}
+
+        {/* Day of week labels */}
+        <div style={{ display: "flex", gap: 4, marginBottom: 4 }}>
+          {weeks[0].map((k, di) => {
+            const d = new Date(k + "T00:00:00");
+            const label = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()];
+            return (
+              <div key={di} style={{ width: 32, textAlign: "center", fontSize: 9, fontWeight: 700, color: "#ccc", letterSpacing: "0.04em" }}>{label}</div>
+            );
+          })}
+        </div>
+
+        {/* Grid: 4 rows (weeks) × 7 cols (days) */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {weeks.map((week, wi) => (
+            <div key={wi} style={{ display: "flex", gap: 4 }}>
+              {week.map((k, di) => {
+                const done = habits[k]?.[habitId];
+                const isStreak = streakDates.has(k);
+                const isToday = k === todayKey();
+                return (
+                  <div key={di} style={{
+                    width: 32, height: 32, borderRadius: 6, flexShrink: 0,
+                    background: done ? (isStreak ? "#f59e0b" : "#1a1a1a") : "#f0ede9",
+                    border: isToday ? "2px solid #b5a898" : "2px solid transparent",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    transition: "background 0.2s",
+                  }}>
+                    {done && <span style={{ color: "#fff", fontSize: 10, fontWeight: 700 }}>✓</span>}
+                  </div>
+                );
+              })}
             </div>
           ))}
+        </div>
+
+        {/* Legend */}
+        <div style={{ display: "flex", gap: 12, marginTop: 10, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+            <div style={{ width: 12, height: 12, borderRadius: 3, background: "#f59e0b" }} />
+            <span style={{ fontSize: 11, color: "#aaa" }}>Current streak</span>
+          </div>
+          <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+            <div style={{ width: 12, height: 12, borderRadius: 3, background: "#1a1a1a" }} />
+            <span style={{ fontSize: 11, color: "#aaa" }}>Completed</span>
+          </div>
+          <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+            <div style={{ width: 12, height: 12, borderRadius: 3, background: "#f0ede9" }} />
+            <span style={{ fontSize: 11, color: "#aaa" }}>Missed</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function WorkoutGrid({ workoutDone, workoutPlan }) {
+    const grid = Array.from({ length: 28 }, (_, i) => {
+      const d = new Date(); d.setDate(d.getDate() - (27 - i));
+      return { date: d.toISOString().split("T")[0], dayIdx: ((d.getDay() + 6) % 7) };
+    });
+    const dayLabels = ["S", "M", "T", "W", "T", "F", "S"];
+
+    // Count streak of consecutive days with workoutDone
+    const streak = (() => {
+      let n = 0, d = new Date();
+      while (true) {
+        const dayIdx = (d.getDay() + 6) % 7;
+        const k = d.toISOString().split("T")[0];
+        const inGrid = grid.find(g => g.date === k);
+        if (inGrid && workoutDone[dayIdx]) { n++; d.setDate(d.getDate() - 7); } else break;
+      }
+      return n;
+    })();
+
+    const totalDone = Object.values(workoutDone).filter(Boolean).length;
+
+    return (
+      <div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ fontSize: 20 }}>💪</div>
+            <div style={{ fontWeight: 600, fontSize: 14, color: "#1a1a1a" }}>Workouts Completed</div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ background: "#f0ede9", borderRadius: 20, padding: "4px 12px" }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "#888" }}>{totalDone}/7 this week</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Day labels */}
+        <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+          {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d, i) => {
+            const done = !!workoutDone[i];
+            const isToday = i === todayDayIdx();
+            const plan = workoutPlan[i];
+            return (
+              <div key={i} style={{
+                flex: 1, borderRadius: 12, padding: "10px 6px", textAlign: "center",
+                background: done ? "#1a1a1a" : isToday ? "#f7f5f2" : "#f0ede9",
+                border: isToday && !done ? "1.5px solid #e0dbd5" : "1.5px solid transparent",
+              }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: done ? "rgba(255,255,255,0.5)" : "#aaa", letterSpacing: "0.04em", marginBottom: 4 }}>{d}</div>
+                <div style={{ fontSize: done ? 16 : 11, color: done ? "#fff" : "#bbb" }}>
+                  {done ? "✓" : "—"}
+                </div>
+                {plan && <div style={{ fontSize: 9, color: done ? "rgba(255,255,255,0.45)" : "#ccc", marginTop: 3, lineHeight: 1.2 }}>{plan.label}</div>}
+              </div>
+            );
+          })}
         </div>
       </div>
     );
@@ -962,8 +1099,6 @@ function ProgressPage({ habits, habitList, protein, waterLog, measurements, setM
 
   const proteinData = last14.map(d => ({ label: d.slice(5), val: protein[d] || 0 }));
   const waterData = last14.map(d => ({ label: d.slice(5), val: waterLog[d] || 0 }));
-  const weightData = measurements.filter(m => m.weight).map(m => ({ label: m.date.slice(5), val: m.weight }));
-  const bfData = measurements.filter(m => m.bf).map(m => ({ label: m.date.slice(5), val: m.bf }));
 
   return (
     <div style={pageStyle}>
@@ -1029,11 +1164,17 @@ function ProgressPage({ habits, habitList, protein, waterLog, measurements, setM
         {/* HABIT GRIDS */}
         <div className="card span-3">
           <CardLabel>Habit Calendar · Last 28 Days</CardLabel>
-          {habitList.map(h => <HabitGrid key={h.id} habitId={h.id} habitLabel={h.label} icon={h.icon} />)}
-          <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 4 }}>
-            <div style={{ width: 12, height: 12, borderRadius: 2, background: "#1a1a1a" }} /><span style={{ fontSize: 11, color: "#aaa" }}>Done</span>
-            <div style={{ width: 12, height: 12, borderRadius: 2, background: "#f0ede9", marginLeft: 8 }} /><span style={{ fontSize: 11, color: "#aaa" }}>Missed</span>
-          </div>
+          {habitList.map((h, i) => (
+            <div key={h.id} style={{ ...(i === habitList.length - 1 ? { marginBottom: 0, paddingBottom: 0, border: "none" } : {}) }}>
+              <HabitGrid habitId={h.id} habitLabel={h.label} icon={h.icon} />
+            </div>
+          ))}
+        </div>
+
+        {/* WORKOUT TRACKER */}
+        <div className="card span-3">
+          <CardLabel>Workout Tracker · This Week</CardLabel>
+          <WorkoutGrid workoutDone={workoutDone} workoutPlan={workoutPlan} />
         </div>
 
         {/* MILES PROGRESS */}
@@ -1086,34 +1227,194 @@ function ProgressPage({ habits, habitList, protein, waterLog, measurements, setM
           </div>
         </div>
 
-        {/* WEIGHT */}
-        <div className="card span-2">
-          <CardLabel>Weight Over Time</CardLabel>
-          <LineChart data={weightData} goal={WEIGHT_GOAL} color="#1a1a1a" />
-          {weightData.length >= 2 && (
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10, fontSize: 13 }}>
-              <span style={{ color: "#888" }}>Change</span>
-              <span style={{ fontWeight: 600, color: weightData[weightData.length - 1].val < weightData[0].val ? "#4caf82" : "#d4614e" }}>
-                {(weightData[weightData.length - 1].val - weightData[0].val).toFixed(1)} lbs
-              </span>
-            </div>
-          )}
-        </div>
+      </div>
+    </div>
+  );
+}
 
-        {/* BODY FAT */}
-        <div className="card span-1">
-          <CardLabel>Body Fat Over Time</CardLabel>
-          <LineChart data={bfData} goal={BF_GOAL} color="#c9a87a" />
-          {bfData.length >= 2 && (
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10, fontSize: 13 }}>
-              <span style={{ color: "#888" }}>Change</span>
-              <span style={{ fontWeight: 600, color: bfData[bfData.length - 1].val < bfData[0].val ? "#4caf82" : "#d4614e" }}>
-                {(bfData[bfData.length - 1].val - bfData[0].val).toFixed(1)}%
-              </span>
-            </div>
-          )}
-        </div>
+// ── PAGE: MEALS ──────────────────────────────────────────────
+const MEAL_SLOTS = [
+  { id: "breakfast", label: "Breakfast", icon: "🌅", time: "7–9 AM" },
+  { id: "snack1", label: "Morning Snack", icon: "🍎", time: "10–11 AM" },
+  { id: "lunch", label: "Lunch", icon: "🥗", time: "12–2 PM" },
+  { id: "snack2", label: "Afternoon Snack", icon: "🥜", time: "3–4 PM" },
+  { id: "dinner", label: "Dinner", icon: "🍽️", time: "6–8 PM" },
+];
 
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function MealPage({ mealPlan, setMealPlan }) {
+  const [selectedDay, setSelectedDay] = useState(todayDayIdx());
+  const [editingSlot, setEditingSlot] = useState(null); // { day, slotId }
+  const [editDraft, setEditDraft] = useState({ name: "", protein: "" });
+
+  const getMeal = (day, slotId) => mealPlan?.[day]?.[slotId] || null;
+
+  const saveMeal = () => {
+    if (!editDraft.name.trim()) { setEditingSlot(null); return; }
+    setMealPlan(prev => ({
+      ...prev,
+      [editingSlot.day]: {
+        ...(prev?.[editingSlot.day] || {}),
+        [editingSlot.slotId]: {
+          name: editDraft.name.trim(),
+          protein: editDraft.protein ? Number(editDraft.protein) : 0,
+        }
+      }
+    }));
+    setEditingSlot(null);
+  };
+
+  const clearMeal = (day, slotId) => {
+    setMealPlan(prev => {
+      const d = { ...(prev?.[day] || {}) };
+      delete d[slotId];
+      return { ...prev, [day]: d };
+    });
+  };
+
+  const startEdit = (day, slotId) => {
+    const existing = getMeal(day, slotId);
+    setEditDraft({ name: existing?.name || "", protein: existing?.protein || "" });
+    setEditingSlot({ day, slotId });
+  };
+
+  const dayTotalProtein = (day) =>
+    MEAL_SLOTS.reduce((sum, s) => sum + (getMeal(day, s.id)?.protein || 0), 0);
+
+  const dayComplete = (day) =>
+    MEAL_SLOTS.filter(s => getMeal(day, s.id)).length;
+
+  const weekTotalProtein = DAYS.reduce((sum, _, i) => sum + dayTotalProtein(i), 0);
+
+  return (
+    <div style={pageStyle}>
+      <div style={{ fontFamily: "'DM Serif Display', serif", fontSize: 28, color: "#1a1a1a", marginBottom: 6 }}>Meal Planner</div>
+      <div style={{ fontSize: 13, color: "#aaa", marginBottom: 22 }}>Weekly avg protein: <strong style={{ color: "#1a1a1a" }}>{Math.round(weekTotalProtein / 7)}g/day</strong></div>
+
+      {/* Weekly overview strip */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 20, overflowX: "auto", paddingBottom: 4 }}>
+        {DAYS.map((day, idx) => {
+          const isToday = idx === todayDayIdx();
+          const isSelected = idx === selectedDay;
+          const filled = dayComplete(idx);
+          const prot = dayTotalProtein(idx);
+          return (
+            <button key={idx} onClick={() => setSelectedDay(idx)}
+              style={{
+                border: "none", cursor: "pointer", borderRadius: 14, padding: "10px 12px",
+                minWidth: 58, flexShrink: 0, textAlign: "center",
+                background: isSelected ? "#1a1a1a" : isToday ? "#f7f5f2" : "#fff",
+                boxShadow: isSelected ? "none" : "0 1px 3px rgba(0,0,0,0.06)",
+                outline: isToday && !isSelected ? "1.5px solid #e0dbd5" : "none",
+                transition: "all 0.15s",
+              }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", color: isSelected ? "rgba(255,255,255,0.6)" : "#aaa", marginBottom: 4 }}>{day}</div>
+              <div style={{ fontFamily: "'DM Serif Display', serif", fontSize: 16, color: isSelected ? "#fff" : "#1a1a1a", lineHeight: 1 }}>{filled}</div>
+              <div style={{ fontSize: 9, color: isSelected ? "rgba(255,255,255,0.5)" : "#bbb", marginTop: 3 }}>{filled}/5 meals</div>
+              {prot > 0 && <div style={{ fontSize: 10, color: isSelected ? "#4caf82" : "#4caf82", fontWeight: 700, marginTop: 3 }}>{prot}g</div>}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Day detail */}
+      <div style={{ marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ fontSize: 15, fontWeight: 600, color: "#1a1a1a" }}>
+          {DAYS[selectedDay]} {selectedDay === todayDayIdx() ? "· Today" : ""}
+        </div>
+        <div style={{ fontSize: 13, color: "#888" }}>
+          Total protein: <strong style={{ color: dayTotalProtein(selectedDay) >= PROTEIN_GOAL ? "#4caf82" : "#1a1a1a" }}>{dayTotalProtein(selectedDay)}g</strong>
+          <span style={{ color: "#ccc" }}> / {PROTEIN_GOAL}g goal</span>
+        </div>
+      </div>
+
+      <ProgressBar pct={Math.min(100, Math.round((dayTotalProtein(selectedDay) / PROTEIN_GOAL) * 100))} color="#4caf82" />
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 16 }}>
+        {MEAL_SLOTS.map(slot => {
+          const meal = getMeal(selectedDay, slot.id);
+          const isEditing = editingSlot?.day === selectedDay && editingSlot?.slotId === slot.id;
+
+          return (
+            <div key={slot.id} style={{
+              background: "#fff", borderRadius: 16, padding: "14px 16px",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+              border: meal ? "1.5px solid #f0ede9" : "1.5px dashed #eee",
+            }}>
+              {isEditing ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#b5a898", letterSpacing: "0.07em", textTransform: "uppercase" }}>
+                    {slot.icon} {slot.label}
+                  </div>
+                  <input className="edit-input" placeholder="What are you eating?" value={editDraft.name}
+                    onChange={e => setEditDraft(p => ({ ...p, name: e.target.value }))}
+                    onKeyDown={e => e.key === "Enter" && saveMeal()} autoFocus />
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <input className="edit-input" type="number" placeholder="Protein (g)" value={editDraft.protein}
+                      onChange={e => setEditDraft(p => ({ ...p, protein: e.target.value }))}
+                      style={{ flex: 1 }} />
+                    <span style={{ fontSize: 12, color: "#aaa", flexShrink: 0 }}>grams protein</span>
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button className="btn-sm" onClick={saveMeal} style={{ background: "#1a1a1a", color: "#fff", flex: 1, padding: "8px" }}>Save</button>
+                    <button className="btn-sm" onClick={() => setEditingSlot(null)} style={{ background: "#f0ede9", color: "#888" }}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ fontSize: 24, flexShrink: 0 }}>{slot.icon}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: "#b5a898", letterSpacing: "0.05em", textTransform: "uppercase" }}>{slot.label}</span>
+                      <span style={{ fontSize: 11, color: "#ddd" }}>{slot.time}</span>
+                    </div>
+                    {meal ? (
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 500, color: "#1a1a1a", marginBottom: 2 }}>{meal.name}</div>
+                        {meal.protein > 0 && (
+                          <div style={{ fontSize: 12, color: "#4caf82", fontWeight: 600 }}>+{meal.protein}g protein</div>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 13, color: "#ccc" }}>Not planned yet</div>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                    <button className="btn-sm" onClick={() => startEdit(selectedDay, slot.id)}
+                      style={{ background: "#f0ede9", color: "#666", fontSize: 12, padding: "6px 10px" }}>
+                      {meal ? "Edit" : "+ Add"}
+                    </button>
+                    {meal && <button className="rm" onClick={() => clearMeal(selectedDay, slot.id)}>×</button>}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Weekly summary */}
+      <div className="card" style={{ marginTop: 20 }}>
+        <CardLabel>Weekly Protein Summary</CardLabel>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {DAYS.map((day, idx) => {
+            const prot = dayTotalProtein(idx);
+            const pct = Math.min(100, Math.round((prot / PROTEIN_GOAL) * 100));
+            const isToday = idx === todayDayIdx();
+            return (
+              <div key={idx} onClick={() => setSelectedDay(idx)} style={{ cursor: "pointer" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
+                  <span style={{ fontWeight: isToday ? 700 : 400, color: isToday ? "#1a1a1a" : "#888" }}>{day}{isToday ? " · Today" : ""}</span>
+                  <span style={{ fontWeight: 600, color: prot >= PROTEIN_GOAL ? "#4caf82" : "#1a1a1a" }}>
+                    {prot}g <span style={{ color: "#ccc", fontWeight: 400 }}>/ {PROTEIN_GOAL}g</span>
+                  </span>
+                </div>
+                <ProgressBar pct={pct} color={prot >= PROTEIN_GOAL ? "#4caf82" : "#c9a87a"} />
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -1135,6 +1436,7 @@ export default function App() {
   const [beautyRoutines, setBeautyRoutines] = useLocalStorage("beauty_routines", DEFAULT_BEAUTY);
   const [providers, setProviders] = useLocalStorage("providers", []);
   const [programs, setPrograms] = useLocalStorage("programs", []);
+  const [mealPlan, setMealPlan] = useLocalStorage("meal_plan", {});
 
   const shared = { habits, setHabits, habitList, setHabitList, protein, setProtein, waterLog, setWaterLog, milesLog, setMilesLog, challengeStart, measurements, setMeasurements, workoutPlan, setWorkoutPlan, workoutDone, setWorkoutDone, beautyLog, setBeautyLog, beautyRoutines, setBeautyRoutines, providers, setProviders, programs, setPrograms };
 
@@ -1143,9 +1445,9 @@ export default function App() {
       <style>{globalCSS}</style>
       {page === "today" && <TodayPage {...shared} />}
       {page === "fitness" && <FitnessPage workoutPlan={shared.workoutPlan} setWorkoutPlan={shared.setWorkoutPlan} workoutDone={shared.workoutDone} setWorkoutDone={shared.setWorkoutDone} />}
-      {page === "beauty" && <BeautyPage {...shared} />}
+      {page === "meals" && <MealPage mealPlan={mealPlan} setMealPlan={setMealPlan} />}
       {page === "programs" && <ProgramsPage {...shared} />}
-      {page === "progress" && <ProgressPage {...shared} />}
+      {page === "progress" && <ProgressPage habits={shared.habits} habitList={shared.habitList} protein={shared.protein} waterLog={shared.waterLog} measurements={shared.measurements} setMeasurements={shared.setMeasurements} milesLog={shared.milesLog} challengeStart={shared.challengeStart} workoutDone={shared.workoutDone} workoutPlan={shared.workoutPlan} />}
       <NavBar page={page} setPage={setPage} />
     </>
   );
