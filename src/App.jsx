@@ -1446,6 +1446,7 @@ export default function App() {
       {page === "today" && <TodayPage {...shared} />}
       {page === "fitness" && <FitnessPage workoutPlan={shared.workoutPlan} setWorkoutPlan={shared.setWorkoutPlan} workoutDone={shared.workoutDone} setWorkoutDone={shared.setWorkoutDone} />}
       {page === "meals" && <MealPage mealPlan={mealPlan} setMealPlan={setMealPlan} />}
+      {page === "beauty" && <BeautyPage beautyLog={shared.beautyLog} setBeautyLog={shared.setBeautyLog} beautyRoutines={shared.beautyRoutines} setBeautyRoutines={shared.setBeautyRoutines} providers={shared.providers} setProviders={shared.setProviders} />}
       {page === "programs" && <ProgramsPage {...shared} />}
       {page === "progress" && <ProgressPage habits={shared.habits} habitList={shared.habitList} protein={shared.protein} waterLog={shared.waterLog} measurements={shared.measurements} setMeasurements={shared.setMeasurements} milesLog={shared.milesLog} challengeStart={shared.challengeStart} workoutDone={shared.workoutDone} workoutPlan={shared.workoutPlan} />}
       <NavBar page={page} setPage={setPage} />
